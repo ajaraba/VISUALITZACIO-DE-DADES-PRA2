@@ -1,0 +1,163 @@
+---
+title: "PRA2"
+author: "Adrià Jaraba"
+date: "2024-01-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## NETEJA
+
+Carreguem el dataset d'accidents de trànsit a Catalunya.
+
+```{r}
+data <- read.csv('Accidents_de_tr_nsit_amb_morts_o_ferits_greus_a_Catalunya.csv')
+```
+
+Carreguem el dataset amb la localització de cada municipi per tal d'unir-lo al d'accidents.
+
+```{r}
+geo_csv <- read.csv("Municipis_Catalunya_Geo_20240113.csv")
+```
+
+
+Treurem espais al inici i final, treurem accents i establirem de forma manual els camps restants després de fer left_join entre els dos datasets per tal d'evitar molts camps que siguin NA i perdre informació rellevant.
+
+```{r}
+# install.packages("stringi")
+library(stringi)
+library(dplyr)
+
+# Funció normalitzar noms de municipis
+# Funció normalitzar noms de municipis
+limpiar_normalizar <- function(texto) {
+  # Eliminar espacios al principio y al final
+  texto <- stri_trim_both(texto)
+  # Normalizar caracteres y convertir a minúsculas
+  texto <- stri_trans_general(texto, "Latin-ASCII")
+  # Convertir a minúsculas
+  texto <- tolower(texto)
+  return(texto)
+}
+
+
+# Apliquem la funció als datasets
+data <- data %>% 
+  mutate(nomMun = limpiar_normalizar(nomMun))
+
+geo_csv <- geo_csv %>% 
+  mutate(Nom = limpiar_normalizar(Nom))
+
+# Modifiquem municipis per a que coincideixin
+data$nomMun[data$nomMun == 'sant carles de la rapita'] <- 'rapita, la'
+data$nomMun[data$nomMun == 'prat de llobregat, e'] <- 'prat de llobregat, el'
+data$nomMun[data$nomMun == 'fogars de tordera'] <- 'fogars de la selva'
+data$nomMun[data$nomMun == 'roda de bara'] <- 'roda de bera'
+data$nomMun[data$nomMun == "arbo?, l'"] <- "arboc, l'"
+data$nomMun[data$nomMun == 'calonge'] <- 'calonge i sant antoni'
+data$nomMun[data$nomMun == "hospitalet de llobregat"] <- "hospitalet de llobregat, l'"
+data$nomMun[data$nomMun == 'santa perpetua de mo'] <- 'santa perpetua de mogoda'
+data$nomMun[data$nomMun == 'santa maria de palau'] <- 'santa maria de palautordera'
+data$nomMun[data$nomMun == 'santa coloma de gramanet'] <- 'santa coloma de gramenet'
+data$nomMun[data$nomMun == 'franqueses del valle'] <- 'franqueses del valles, les'
+data$nomMun[data$nomMun == 'castellbell i el vil'] <- 'castellbell i el vilar'
+data$nomMun[data$nomMun == 'castellet i la gorna'] <- 'castellet i la gornal'
+data$nomMun[data$nomMun == "castell-platja d'aro"] <- "castell d'aro, platja d'aro i s'agaro"
+data$nomMun[data$nomMun == 'sant joan de vilator'] <- 'sant joan de vilatorrada'
+data$nomMun[data$nomMun == 'monistrol de montser'] <- 'monistrol de montserrat'
+data$nomMun[data$nomMun == 'sant anfreu de la barca'] <- 'sant andreu de la barca'
+data$nomMun[data$nomMun == 'palau de plegamans'] <- 'palau-solita i plegamans'
+
+# Realitzem la unió dels datasets
+data_final <- left_join(data, geo_csv, by = c("nomMun" = "Nom"))
+```
+
+Com de forma manual s'imputen els camps que no coincideixen d'una forma molt més lenta, valorem només imputar els valors dels camps més rellevants amb NA. Per això realitzem una recerca d'aquells camps amb valors NA de forma significativa (considerem aquells casos > 30 accidents)
+
+```{r}
+# Filtra i comptar els NA en 'Codi.comarca' per 'nomMun'
+count_NA_by_nomMun <- data_final %>%
+  group_by(nomMun) %>%
+  summarise(count_NA = sum(is.na(Codi.comarca)))
+
+# Mostrem els que tenen valors NA
+count_NA_by_nomMun_with_NA <- count_NA_by_nomMun %>%
+  filter(count_NA > 0)
+
+# Imprimim
+print(count_NA_by_nomMun_with_NA)
+```
+
+```{r}
+# Elimina las filas donde 'Codi.comarca' es NA
+data_final <- subset(data_final, !is.na(Codi.comarca))
+
+data_final$Latitud <- as.numeric(data_final$Latitud)
+data_final$Longitud <- as.numeric(data_final$Longitud)
+```
+
+```{r}
+
+# Supongamos que tu dataset se llama 'data_final'
+
+# Limpiar y normalizar Latitud y Longitud
+data_final$Latitud <- as.numeric(gsub("[^0-9.-]", "", data_final$Latitud))
+data_final$Longitud <- as.numeric(gsub("[^0-9.-]", "", data_final$Longitud))
+
+
+```
+
+Exportem el joc de dades final.
+
+```{r}
+# Especifica la ruta y nombre de archivo CSV
+ruta_archivo <- "C:/Users/adria/OneDrive/Escritorio/Visualización de datos/PRA1/data_final.csv"
+
+# Exporta 'data_final' a un archivo CSV
+write.csv(data_final, file = ruta_archivo, row.names = FALSE)
+
+# Confirma la exportación
+print(paste("Archivo CSV exportado:", ruta_archivo))
+```
+
+```{r}
+# install.packages("ggplot2")
+library(ggplot2)
+
+# Gràfic variable 'zona'
+ggplot(data_final, aes(x = zona, fill = zona)) +
+  geom_bar() +
+  labs(title = "Distribución de la variable Zona", x = "Zona", y = "Frecuencia") +
+  scale_fill_brewer(palette = "Set3")
+
+```
+```{r}
+# Cuenta la frecuencia de cada año en la variable 'Any'
+frecuencia_any <- table(data_final$Any)
+
+# Muestra la frecuencia para cada año
+print(frecuencia_any)
+```
+
+```{r}
+# Filtra las filas donde D_GRAVETAT es igual a "Accident mortal"
+data_accidentes_mortales <- subset(data_final, D_GRAVETAT == "Accident mortal")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
